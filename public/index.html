@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weather Notification Signup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">Weather Notification Signup</h1>
+    <p class="text-sm text-gray-600 mb-4 text-center">Register your email to receive daily weather updates for your precise location.</p>
+    <form id="emailForm" class="space-y-4">
+        <div>
+            <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+            <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    required
+                    placeholder="Enter your email"
+                    class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+        </div>
+        <button type="submit" class="w-full bg-[#0cc36e] text-white p-2 rounded-md hover:bg-[#c5ec6d]">
+            Subscribe
+        </button>
+    </form>
+    <p id="message" class="mt-4 text-center text-sm text-gray-600"></p>
+</div>
+
+<script>
+    // Haversine formula to calculate distance (km) between two lat/lon points
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    document.getElementById('emailForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const messageEl = document.getElementById('message');
+      const email = document.getElementById('email').value;
+      const kathmanduLat = 27.7172;
+      const kathmanduLon = 85.3240;
+
+      if (!navigator.geolocation) {
+        messageEl.textContent = 'Geolocation is not supported by your browser. Using default location (Kathmandu).';
+        messageEl.className = 'mt-4 text-center text-sm text-red-600';
+        submitSubscription(email, kathmanduLat, kathmanduLon);
+        return;
+      }
+
+      messageEl.textContent = 'Getting your precise location...';
+      messageEl.className = 'mt-4 text-center text-sm text-gray-600';
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          let lat = position.coords.latitude;
+          let lon = position.coords.longitude;
+
+          // Check if location is within 50km of Kathmandu
+          const distance = getDistance(lat, lon, kathmanduLat, kathmanduLon);
+          if (distance > 50) {
+            console.log(`Location too far from Kathmandu (${distance.toFixed(1)} km), using default`);
+            messageEl.textContent = 'Location too far from Kathmandu. Using default location (Kathmandu).';
+            messageEl.className = 'mt-4 text-center text-sm text-red-600';
+            lat = kathmanduLat;
+            lon = kathmanduLon;
+          }
+
+          await submitSubscription(email, lat, lon);
+        },
+        (error) => {
+          console.error('Geolocation error:', error.message);
+          messageEl.textContent = 'Failed to get location: ' + error.message + '. Using default location (Kathmandu).';
+          messageEl.className = 'mt-4 text-center text-sm text-red-600';
+          submitSubscription(email, kathmanduLat, kathmanduLon);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        }
+      );
+    });
+
+    async function submitSubscription(email, lat, lon) {
+      const messageEl = document.getElementById('message');
+      try {
+        const response = await fetch('/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, lat, lon }),
+        });
+        const result = await response.json();
+        messageEl.textContent = result.message;
+        messageEl.className = `mt-4 text-center text-sm ${response.ok ? 'text-green-600' : 'text-red-600'}`;
+        if (response.ok) {
+          document.getElementById('emailForm').reset();
+        }
+      } catch {
+        messageEl.textContent = 'Error subscribing. Try again.';
+        messageEl.className = 'mt-4 text-center text-sm text-red-600';
+      }
+    }
+</script>
+</body>
+</html>
