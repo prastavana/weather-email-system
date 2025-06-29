@@ -22,7 +22,7 @@
                     class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
         </div>
-        <button type="submit" class="w-full bg-[#0cc36e] text-white p-2 rounded-md hover:bg-[#c5ec6d]">
+        <button type="submit" class="w-full bg-[#00FF00] text-white p-2 rounded-md hover:bg-[#00CC00]">
             Subscribe
         </button>
     </form>
@@ -30,30 +30,17 @@
 </div>
 
 <script>
-    // Haversine formula to calculate distance (km) between two lat/lon points
-    function getDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371; // Earth's radius in km
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    }
-
     document.getElementById('emailForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const messageEl = document.getElementById('message');
       const email = document.getElementById('email').value;
-      const kathmanduLat = 27.7172;
-      const kathmanduLon = 85.3240;
+      const defaultLat = 27.7172; // Kathmandu
+      const defaultLon = 85.3240;
 
       if (!navigator.geolocation) {
         messageEl.textContent = 'Geolocation is not supported by your browser. Using default location (Kathmandu).';
         messageEl.className = 'mt-4 text-center text-sm text-red-600';
-        submitSubscription(email, kathmanduLat, kathmanduLon);
+        submitSubscription(email, defaultLat, defaultLon);
         return;
       }
 
@@ -62,26 +49,16 @@
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          let lat = position.coords.latitude;
-          let lon = position.coords.longitude;
-
-          // Check if location is within 50km of Kathmandu
-          const distance = getDistance(lat, lon, kathmanduLat, kathmanduLon);
-          if (distance > 50) {
-            console.log(`Location too far from Kathmandu (${distance.toFixed(1)} km), using default`);
-            messageEl.textContent = 'Location too far from Kathmandu. Using default location (Kathmandu).';
-            messageEl.className = 'mt-4 text-center text-sm text-red-600';
-            lat = kathmanduLat;
-            lon = kathmanduLon;
-          }
-
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          console.log(`Geolocation success: lat:${lat}, lon:${lon}`);
           await submitSubscription(email, lat, lon);
         },
         (error) => {
           console.error('Geolocation error:', error.message);
           messageEl.textContent = 'Failed to get location: ' + error.message + '. Using default location (Kathmandu).';
           messageEl.className = 'mt-4 text-center text-sm text-red-600';
-          submitSubscription(email, kathmanduLat, kathmanduLon);
+          submitSubscription(email, defaultLat, defaultLon);
         },
         {
           enableHighAccuracy: true,
@@ -105,7 +82,8 @@
         if (response.ok) {
           document.getElementById('emailForm').reset();
         }
-      } catch {
+      } catch (error) {
+        console.error('Subscription error:', error.message);
         messageEl.textContent = 'Error subscribing. Try again.';
         messageEl.className = 'mt-4 text-center text-sm text-red-600';
       }
