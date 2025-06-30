@@ -22,6 +22,30 @@
                     class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
         </div>
+        <div id="locationInputs" class="hidden space-y-4">
+            <div>
+                <label for="latitude" class="block text-sm font-medium text-gray-700">Latitude</label>
+                <input
+                        type="number"
+                        id="latitude"
+                        name="latitude"
+                        step="any"
+                        placeholder="e.g., 27.7172"
+                        class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+            </div>
+            <div>
+                <label for="longitude" class="block text-sm font-medium text-gray-700">Longitude</label>
+                <input
+                        type="number"
+                        id="longitude"
+                        name="longitude"
+                        step="any"
+                        placeholder="e.g., 85.3240"
+                        class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+            </div>
+        </div>
         <button type="submit" class="w-full bg-[#00FF00] text-white p-2 rounded-md hover:bg-[#00CC00]">
             Subscribe
         </button>
@@ -36,15 +60,33 @@
       const email = document.getElementById('email').value;
       const defaultLat = 27.7172; // Kathmandu
       const defaultLon = 85.3240;
+      const locationInputs = document.getElementById('locationInputs');
+      const latInput = document.getElementById('latitude').value;
+      const lonInput = document.getElementById('longitude').value;
+
+      if (latInput && lonInput) {
+        const lat = parseFloat(latInput);
+        const lon = parseFloat(lonInput);
+        if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+          messageEl.textContent = 'Using manually entered location...';
+          messageEl.className = 'mt-4 text-center text-sm text-gray-600';
+          submitSubscription(email, lat, lon);
+          return;
+        } else {
+          messageEl.textContent = 'Invalid latitude or longitude. Please enter valid coordinates.';
+          messageEl.className = 'mt-4 text-center text-sm text-red-600';
+          return;
+        }
+      }
 
       if (!navigator.geolocation) {
-        messageEl.textContent = 'Geolocation is not supported by your browser. Using default location (Kathmandu).';
+        messageEl.textContent = 'Geolocation is not supported by your browser. Please enter your location manually.';
         messageEl.className = 'mt-4 text-center text-sm text-red-600';
-        submitSubscription(email, defaultLat, defaultLon);
+        locationInputs.classList.remove('hidden');
         return;
       }
 
-      messageEl.textContent = 'Getting your precise location...';
+      messageEl.textContent = 'Requesting your location...';
       messageEl.className = 'mt-4 text-center text-sm text-gray-600';
 
       navigator.geolocation.getCurrentPosition(
@@ -52,17 +94,21 @@
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
           console.log(`Geolocation success: lat:${lat}, lon:${lon}`);
+          messageEl.textContent = 'Location retrieved successfully!';
+          messageEl.className = 'mt-4 text-center text-sm text-green-600';
           await submitSubscription(email, lat, lon);
         },
         (error) => {
           console.error('Geolocation error:', error.message);
-          messageEl.textContent = 'Failed to get location: ' + error.message + '. Using default location (Kathmandu).';
+          messageEl.textContent = `Failed to get location: ${error.message}. Please enter your location manually or use default (Kathmandu).`;
           messageEl.className = 'mt-4 text-center text-sm text-red-600';
-          submitSubscription(email, defaultLat, defaultLon);
+          locationInputs.classList.remove('hidden');
+          document.getElementById('latitude').value = defaultLat;
+          document.getElementById('longitude').value = defaultLon;
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
+          timeout: 10000,
           maximumAge: 0
         }
       );
@@ -81,6 +127,7 @@
         messageEl.className = `mt-4 text-center text-sm ${response.ok ? 'text-green-600' : 'text-red-600'}`;
         if (response.ok) {
           document.getElementById('emailForm').reset();
+          document.getElementById('locationInputs').classList.add('hidden');
         }
       } catch (error) {
         console.error('Subscription error:', error.message);

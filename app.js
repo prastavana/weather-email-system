@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 const deta = process.env.DETA_PROJECT_KEY ? Deta(process.env.DETA_PROJECT_KEY) : null;
 const drive = deta ? deta.Drive('emails') : null;
 const EMAILS_FILE = deta ? 'emails.json' : path.join(__dirname, 'emails.json');
-let lastWeatherData = null;
+let lastWeatherData = {};
 
 // Middleware
 app.use(express.static(path.join(__dirname, 'public')));
@@ -49,7 +49,7 @@ async function loadEmails() {
         return [];
       }
       const content = await data.text();
-      return JSON.parse(content);
+      return normalizeEmails(JSON.parse(content));
     } else {
       const fs = require('fs').promises;
       const data = await fs.readFile(EMAILS_FILE, 'utf8');
@@ -57,12 +57,23 @@ async function loadEmails() {
         console.log('emails.json is empty, returning empty array');
         return [];
       }
-      return JSON.parse(data);
+      return normalizeEmails(JSON.parse(data));
     }
   } catch (error) {
     console.error('Error loading emails:', error.message, error.stack);
     return [];
   }
+}
+
+// Normalize emails to ensure all entries are objects
+function normalizeEmails(emails) {
+  return emails.map(item => {
+    if (typeof item === 'string') {
+      console.log(`Converting plain email ${item} to object with default Kathmandu coordinates`);
+      return { email: item, lat: 27.7172, lon: 85.3240 };
+    }
+    return item;
+  });
 }
 
 // Save emails
@@ -92,7 +103,7 @@ async function reverseGeocode(lat, lon) {
     const addr = res.data.address;
     return [addr.neighbourhood, addr.suburb, addr.city, addr.state, addr.country].filter(Boolean).join(', ');
   } catch (err) {
-    console.error('Geocode failed:', err.message);
+    console.error('Geocode failed for lat:', lat, 'lon:', lon, 'Error:', err.message);
     return null;
   }
 }
@@ -131,15 +142,15 @@ ${stormText}
 }
 
 // Format email message
-function formatEmailMessage(data, isFollowUp = false) {
+function formatEmailMessage(data, isFollowUp = false, email) {
   const nepali = translateToNepali(data);
 
-  const changes = isFollowUp && lastWeatherData
+  const changes = isFollowUp && lastWeatherData[email]
     ? `
 Changes since last update:
-${data.precipitation !== lastWeatherData.precipitation ? `- Precipitation: ${lastWeatherData.precipitation} mm → ${data.precipitation} mm\n` : ''}
-${data.rainChance !== lastWeatherData.rainChance ? `- Chance of Rain: ${lastWeatherData.rainChance}% → ${data.rainChance}%\n` : ''}
-${data.stormWarning !== lastWeatherData.stormWarning ? `- Storm Warning: ${lastWeatherData.stormWarning || 'None'} → ${data.stormWarning || 'None'}\n` : ''}
+${data.precipitation !== lastWeatherData[email].precipitation ? `- Precipitation: ${lastWeatherData[email].precipitation} mm → ${data.precipitation} mm\n` : ''}
+${data.rainChance !== lastWeatherData[email].rainChance ? `- Chance of Rain: ${lastWeatherData[email].rainChance}% → ${data.rainChance}%\n` : ''}
+${data.stormWarning !== lastWeatherData[email].stormWarning ? `- Storm Warning: ${lastWeatherData[email].stormWarning || 'None'} → ${data.stormWarning || 'None'}\n` : ''}
     `.trim()
     : '';
 
@@ -219,7 +230,7 @@ async function fetchWeatherData(lat, lon) {
     console.log(`Fetched weather data for lat:${lat}, lon:${lon}:`, forecast);
     return forecast;
   } catch (error) {
-    console.error('API request failed:', error.message, error.response?.data);
+    console.error('API request failed for lat:', lat, 'lon:', lon, 'Error:', error.message, error.response?.data);
     throw error;
   }
 }
@@ -242,29 +253,24 @@ transporter.verify((error, success) => {
   }
 });
 
-// Send weather email
-async function sendWeatherEmail(lat, lon, isFollowUp = false) {
+// Send weather email for a specific user
+async function sendWeatherEmail(email, lat, lon, isFollowUp = false) {
   try {
-    const emails = await loadEmails();
-    if (!emails.length) {
-      console.log('No registered emails to send updates to.');
-      return;
+    if (!email) {
+      throw new Error('No email provided');
     }
-
     const { lat: validLat, lon: validLon } = validateCoordinates(lat, lon);
     const data = await fetchWeatherData(validLat, validLon);
-    const message = formatEmailMessage(data, isFollowUp);
+    const message = formatEmailMessage(data, isFollowUp, email);
 
-    for (const email of emails) {
-      await transporter.sendMail({
-        from: process.env.EMAIL_ADDRESS,
-        to: email,
-        subject: isFollowUp ? `🌤️ Weather Update from Kriyaat` : `🌤️ Daily Weather Update from Kriyaat`,
-        text: message,
-      });
-      console.log(`📬 Email sent to ${email}${isFollowUp ? ' (follow-up)' : ''} at ${new Date().toISOString()}`);
-    }
-    lastWeatherData = data;
+    await transporter.sendMail({
+      from: process.env.EMAIL_ADDRESS,
+      to: email,
+      subject: isFollowUp ? `🌤️ Weather Update from Kriyaat` : `🌤️ Daily Weather Update from Kriyaat`,
+      text: message,
+    });
+    console.log(`📬 Email sent to ${email}${isFollowUp ? ' (follow-up)' : ''} for lat:${validLat}, lon:${validLon} at ${new Date().toISOString()}`);
+    lastWeatherData[email] = data;
 
     if (!isFollowUp && data.heavyRainHour) {
       const rainTime = new Date(data.heavyRainHour.time);
@@ -272,21 +278,40 @@ async function sendWeatherEmail(lat, lon, isFollowUp = false) {
       const now = new Date();
       const delay = notifyTime - now;
       if (delay > 0) {
-        console.log(`🔔 Scheduling heavy rain alert in ${Math.round(delay / 60000)} mins`);
+        console.log(`🔔 Scheduling heavy rain alert for ${email} in ${Math.round(delay / 60000)} mins`);
         setTimeout(() => {
-          emails.forEach(email => {
-            transporter.sendMail({
-              from: process.env.EMAIL_ADDRESS,
-              to: email,
-              subject: `🌧️ Alert from Kriyaat: Heavy rain expected soon`,
-              text: `🙏 Namaste from Kriyaat!\n\n🌧️ Heavy rain expected around ${data.heavyRainHour.time.split(' ')[1]}.\nPlease be prepared and carry an umbrella ☂️.`,
-            }).catch(err => console.error(`Failed to send heavy rain alert to ${email}:`, err.message));
-          });
+          transporter.sendMail({
+            from: process.env.EMAIL_ADDRESS,
+            to: email,
+            subject: `🌧️ Alert from Kriyaat: Heavy rain expected soon`,
+            text: `🙏 Namaste from Kriyaat!\n\n🌧️ Heavy rain expected around ${data.heavyRainHour.time.split(' ')[1]} at ${data.locationName}.\nPlease be prepared and carry an umbrella ☂️.`,
+          }).catch(err => console.error(`Failed to send heavy rain alert to ${email}:`, err.message));
         }, delay);
       }
     }
   } catch (error) {
-    console.error('Failed to send email:', error.message, error.stack);
+    console.error(`Failed to send email to ${email}:`, error.message, error.stack);
+  }
+}
+
+// Send weather emails to all users
+async function sendWeatherEmailsToAll(isFollowUp = false) {
+  try {
+    const emails = await loadEmails();
+    if (!emails.length) {
+      console.log('No registered emails to send updates to.');
+      return;
+    }
+
+    for (const user of emails) {
+      if (!user.email || !user.lat || !user.lon) {
+        console.error(`Invalid user data:`, user);
+        continue;
+      }
+      await sendWeatherEmail(user.email, user.lat, user.lon, isFollowUp);
+    }
+  } catch (error) {
+    console.error('Failed to send emails to all users:', error.message, error.stack);
   }
 }
 
@@ -302,17 +327,20 @@ app.post('/subscribe', async (req, res) => {
 
   try {
     let emails = await loadEmails();
-    if (!emails.includes(email)) {
-      emails.push(email);
-      await saveEmails(emails);
+    if (!emails.some(user => user.email === email)) {
+      emails.push({ email, lat, lon });
+    } else {
+      console.log(`Email ${email} already subscribed, updating coordinates to lat:${lat}, lon:${lon}`);
+      emails = emails.map(user => user.email === email ? { email, lat, lon } : user);
     }
+    await saveEmails(emails);
 
     console.log(`Sending initial email for ${email}, lat:${lat}, lon:${lon} at ${new Date().toISOString()}`);
-    await sendWeatherEmail(lat, lon);
+    await sendWeatherEmail(email, lat, lon);
     console.log(`Scheduling follow-up email for ${email} in 3 hours`);
     setTimeout(() => {
       console.log(`Executing follow-up email for ${email} at ${new Date().toISOString()}`);
-      sendWeatherEmail(lat, lon, true);
+      sendWeatherEmail(email, lat, lon, true);
     }, 3 * 60 * 60 * 1000); // 3 hours
 
     res.json({ message: 'Subscribed! You’ll get your updates soon.' });
@@ -325,7 +353,7 @@ app.post('/subscribe', async (req, res) => {
 // Daily 7:15 AM (Nepal)
 cron.schedule('15 1 * * *', () => {
   console.log('⏰ Sending daily update (7:15AM NPT) at ' + new Date().toISOString());
-  sendWeatherEmail(27.7172, 85.3240);
+  sendWeatherEmailsToAll();
 }, { timezone: 'Asia/Kathmandu' });
 
 // Debug route
