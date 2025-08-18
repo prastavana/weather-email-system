@@ -23,6 +23,7 @@ let lastWeatherData = {};
 
 // Middleware
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use(bodyParser.json());
 
 // Initialize emails.json
@@ -196,13 +197,19 @@ function validateCoordinates(lat, lon) {
 async function fetchWeatherData(lat, lon) {
   const apiKey = process.env.WEATHERAPI_KEY;
   if (!apiKey) throw new Error('WEATHERAPI_KEY not set in environment variables');
-  const url = `http://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lon}&days=1&alerts=yes`;
+  const url = `http://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lon}&days=2&alerts=yes`;
 
   try {
     const res = await axios.get(url);
     const data = res.data;
-    const today = data.forecast.forecastday[0].day;
-    const hourly = data.forecast.forecastday[0].hour;
+    const current = data.current;
+    const forecastday = data.forecast.forecastday;
+
+    const localtime = data.location.localtime;
+    const local_date = localtime.split(' ')[0];
+
+    const current_day = forecastday.find(f => f.date === local_date) || forecastday[0];
+    const hourly = [].concat(...forecastday.map(f => f.hour));
 
     const rainHours = hourly.filter(h => h.chance_of_rain > 30 && h.precip_mm > 0);
     const rainStart = rainHours.length ? rainHours[0].time.split(' ')[1] : null;
@@ -215,16 +222,21 @@ async function fetchWeatherData(lat, lon) {
 
     const forecast = {
       locationName,
-      conditionText: today.condition.text,
-      maxTemp: today.maxtemp_c.toFixed(1),
-      minTemp: today.mintemp_c.toFixed(1),
-      humidity: today.avghumidity.toFixed(0),
-      precipitation: today.totalprecip_mm.toFixed(1),
-      rainChance: today.daily_chance_of_rain || 0,
+      currentTemp: current.temp_c.toFixed(1),
+      conditionText: current.condition.text,
+      maxTemp: current_day.day.maxtemp_c.toFixed(1),
+      minTemp: current_day.day.mintemp_c.toFixed(1),
+      humidity: current_day.day.avghumidity.toFixed(0),
+      windSpeed: current.wind_kph.toFixed(0),
+      uv: current.uv,
+      precipitation: current_day.day.totalprecip_mm.toFixed(1),
+      rainChance: current_day.day.daily_chance_of_rain || 0,
       rainStart,
       rainEnd,
       stormWarning,
-      heavyRainHour: hourly.find(h => h.precip_mm >= 2)
+      heavyRainHour: hourly.find(h => h.precip_mm >= 2),
+      hourly,
+      localtime
     };
 
     console.log(`Fetched weather data for lat:${lat}, lon:${lon}:`, forecast);
@@ -234,6 +246,20 @@ async function fetchWeatherData(lat, lon) {
     throw error;
   }
 }
+
+// New endpoint to fetch weather data for frontend
+app.get('/weather', async (req, res) => {
+  let { lat, lon } = req.query;
+  const valid = validateCoordinates(lat, lon);
+  lat = valid.lat;
+  lon = valid.lon;
+  try {
+    const data = await fetchWeatherData(lat, lon);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch weather data' });
+  }
+});
 
 // Email configuration
 const transporter = nodemailer.createTransport({

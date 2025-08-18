@@ -1,140 +1,803 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="scroll-smooth" lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Weather Notification Signup</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Kriyaat - Interactive Weather and Crop Advisory Tool</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style type="text/tailwindcss">
+        body {
+            font-family: 'Poppins', sans-serif;
+            scroll-behavior: smooth;
+        }
+        .blinking-dot {
+            animation: blinker 1.5s linear infinite;
+        }
+        @keyframes blinker {
+            50% {
+                opacity: 0.2;
+            }
+        }
+        .warning-pulse {
+            animation: pulse 2s infinite;
+            border-color: #f59e0b;
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+            }
+        }
+        [x-cloak] {
+            display: none !important;
+        }
+        .info-dot {
+            position: relative;
+        }
+        .info-dot .tooltip {
+            visibility: hidden;
+            width: 120px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .info-dot .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent;
+        }
+        .info-dot:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .wave {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .wave-bg {
+            position: absolute;
+            bottom: 0;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            border-radius: 40%;
+            background-color: rgba(59, 130, 246, 0.5);animation: wave-animation 5s linear infinite;
+        }
+        @keyframes wave-animation {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-<div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-    <h1 class="text-2xl font-bold mb-4 text-center">Weather Notification Signup</h1>
-    <p class="text-sm text-gray-600 mb-4 text-center">Register your email to receive daily weather updates for your precise location.</p>
-    <form id="emailForm" class="space-y-4">
-        <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
-            <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    required
-                    placeholder="Enter your email"
-                    class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-        </div>
-        <div id="locationInputs" class="hidden space-y-4">
-            <div>
-                <label for="latitude" class="block text-sm font-medium text-gray-700">Latitude</label>
-                <input
-                        type="number"
-                        id="latitude"
-                        name="latitude"
-                        step="any"
-                        placeholder="e.g., 27.7172"
-                        class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+<body class="bg-gray-100" x-data="{ allExpanded: true, farmType: 'open-air' }">
+<header class="bg-white shadow-sm sticky top-0 z-30">
+    <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-teal-500 rounded-full mr-3 flex items-center justify-center">
+                <span class="material-icons text-white">grass</span>
             </div>
+            <h1 class="text-2xl font-bold text-gray-800">Kriyaat</h1>
+        </div>
+        <nav class="hidden md:flex items-center space-x-8">
+            <a class="text-gray-600 hover:text-teal-500 transition-colors" href="#">Home</a>
+            <a class="text-gray-600 hover:text-teal-500 transition-colors" href="#about">About Us</a>
+            <a class="text-gray-600 hover:text-teal-500 transition-colors" href="#team">Team</a>
+            <a class="text-gray-600 hover:text-teal-500 transition-colors" href="#contact">Contact Us</a>
+        </nav>
+        <div class="flex items-center space-x-4">
+            <div class="relative" x-data="{ langMenu: false }">
+                <button @click="langMenu = !langMenu" class="flex items-center text-gray-600 hover:text-teal-500 transition-colors">
+                    <span class="material-icons">language</span>
+                    <span class="ml-2 hidden lg:inline">English</span>
+                    <span :class="{ 'rotate-180': langMenu }" class="material-icons transition-transform">expand_more</span>
+                </button>
+                <div @click.outside="langMenu = false" class="absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg py-1 z-20 transition-all" x-cloak x-show="langMenu" x-transition:enter="transition ease-out duration-100" x-transition:enter-end="transform opacity-100 scale-100" x-transition:enter-start="transform opacity-0 scale-95" x-transition:leave="transition ease-in duration-75" x-transition:leave-end="transform opacity-0 scale-95" x-transition:leave-start="transform opacity-100 scale-100">
+                    <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">English</a>
+                    <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Nepali</a>
+                    <a class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" href="#">Hindi</a>
+                </div>
+            </div>
+            <button class="text-gray-600 hover:text-teal-500 transition-colors">
+                <span class="material-icons">visibility</span>
+            </button>
+            <button class="relative text-gray-600 hover:text-teal-500 transition-colors">
+                <span class="material-icons">notifications</span>
+                <span class="absolute top-0 right-0 h-2.5 w-2.5 bg-red-500 rounded-full animate-ping"></span>
+                <span class="absolute top-0.5 right-0.5 h-1.5 w-1.5 bg-red-500 rounded-full"></span>
+            </button>
+        </div>
+    </div>
+</header>
+<main class="container mx-auto px-6 py-12">
+    <section class="text-center mb-12">
+        <h2 class="text-4xl md:text-5xl font-bold text-gray-800 mb-4 animate-fade-in-down">Your Farm's Digital Companion</h2>
+        <p class="text-lg text-gray-600 max-w-3xl mx-auto">Smart decisions with humane advice, right when you need it.</p>
+    </section>
+    <section class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-8 shadow-md flex justify-between items-center" role="alert">
+        <div class="flex items-center">
+            <div class="py-1"><span class="material-icons mr-3 text-yellow-600 animate-pulse">warning</span></div>
             <div>
-                <label for="longitude" class="block text-sm font-medium text-gray-700">Longitude</label>
-                <input
-                        type="number"
-                        id="longitude"
-                        name="longitude"
-                        step="any"
-                        placeholder="e.g., 85.3240"
-                        class="mt-1 p-2 w-full border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <p class="font-bold">Government Warning: Flash Flood Alert</p>
+                <p class="text-sm">Heavy rainfall is expected in the next 24 hours. Farmers in low-lying areas are advised to take necessary precautions. <a class="font-semibold underline hover:text-yellow-800" href="#">Learn more</a></p>
             </div>
         </div>
-        <button type="submit" class="w-full bg-[#00FF00] text-white p-2 rounded-md hover:bg-[#00CC00]">
-            Subscribe
+        <a class="bg-teal-500 text-white py-2 px-4 rounded-lg shadow-md hover:bg-teal-600 transition-colors flex items-center animate-bounce" href="#crop-advisory">
+            <span class="material-icons mr-2">agriculture</span>
+            <span>Crop Advisory</span>
+        </a>
+    </section>
+    <div class="flex justify-end mb-6">
+        <button @click="allExpanded = !allExpanded" class="bg-white text-gray-600 hover:bg-gray-200 transition-colors py-2 px-4 rounded-lg shadow-sm flex items-center">
+            <span class="material-icons mr-2 text-sm" x-text="allExpanded ? 'unfold_less' : 'unfold_more'"></span>
+            <span x-text="allExpanded ? 'Collapse All' : 'Expand All'"></span>
         </button>
-    </form>
-    <p id="message" class="mt-4 text-center text-sm text-gray-600"></p>
-</div>
-
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-8">
+            <div class="bg-white p-6 rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1" x-data="{ expanded: true }" x-init="$watch('allExpanded', value => expanded = value)">
+                <div @click="expanded = !expanded" class="flex justify-between items-center cursor-pointer">
+                    <h3 class="text-xl font-semibold text-gray-800 flex items-center">
+                        <span class="material-icons text-teal-500 mr-3">thermostat</span> Current & Upcoming Weather
+                    </h3>
+                    <button :class="{'rotate-180': !expanded}" class="text-gray-500 hover:text-gray-700 transition-transform">
+                        <span class="material-icons">expand_less</span>
+                    </button>
+                </div>
+                <div class="mt-6" x-collapse x-show="expanded">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-blue-50 p-6 rounded-xl flex flex-col justify-between relative transition-transform hover:scale-105 hover:shadow-lg">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm text-blue-600 mb-1">Temperature</p>
+                                    <p id="current-temp" class="text-3xl font-bold text-blue-900">28°C</p>
+                                    <p id="min-max-temp" class="text-sm text-blue-600">Min: --°C Max: --°C</p>
+                                </div>
+                                <div id="temp-dot" class="info-dot">
+                                    <div class="w-3 h-3 bg-green-500 rounded-full blinking-dot"></div>
+                                    <span class="tooltip">Normal</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center mt-4">
+                                <span class="material-icons text-blue-300 text-4xl mr-3">thermostat</span>
+                                <div class="w-full bg-blue-200 rounded-full h-2.5">
+                                    <div id="temp-bar" class="bg-blue-500 h-2.5 rounded-full" style="width: 70%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-cyan-50 p-6 rounded-xl flex flex-col justify-between relative transition-transform hover:scale-105 hover:shadow-lg">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm text-cyan-600 mb-1">Humidity</p>
+                                    <p id="humidity" class="text-3xl font-bold text-cyan-900">85%</p>
+                                </div>
+                                <div id="humidity-dot" class="info-dot">
+                                    <div class="w-3 h-3 bg-red-500 rounded-full blinking-dot"></div>
+                                    <span class="tooltip">High</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center mt-4">
+                                <span class="material-icons text-cyan-300 text-4xl mr-3">water_drop</span>
+                                <div class="w-full bg-cyan-200 rounded-full h-2.5">
+                                    <div id="humidity-bar" class="bg-cyan-500 h-2.5 rounded-full" style="width: 85%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-200 p-6 rounded-xl flex flex-col justify-between relative transition-transform hover:scale-105 hover:shadow-lg">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-600 mb-1">Wind Speed</p>
+                                    <p id="wind-speed" class="text-3xl font-bold text-gray-900">10 km/h</p>
+                                </div>
+                                <div id="wind-dot" class="info-dot">
+                                    <div class="w-3 h-3 bg-green-500 rounded-full blinking-dot"></div>
+                                    <span class="tooltip">Normal</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center mt-4">
+                                <span class="material-icons text-gray-400 text-4xl mr-3">air</span>
+                                <div class="w-full bg-gray-300 rounded-full h-2.5">
+                                    <div id="wind-bar" class="bg-gray-500 h-2.5 rounded-full" style="width: 30%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-yellow-100 p-6 rounded-xl flex flex-col justify-between relative transition-transform hover:scale-105 hover:shadow-lg">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm text-yellow-700 mb-1">UV Index</p>
+                                    <p id="uv-index" class="text-3xl font-bold text-yellow-900">High</p>
+                                </div>
+                                <div id="uv-dot" class="info-dot">
+                                    <div class="w-3 h-3 bg-yellow-500 rounded-full blinking-dot"></div>
+                                    <span class="tooltip">High</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center mt-4">
+                                <span class="material-icons text-yellow-300 text-4xl mr-3">wb_sunny</span>
+                                <div class="w-full bg-yellow-200 rounded-full h-2.5">
+                                    <div id="uv-bar" class="bg-yellow-500 h-2.5 rounded-full" style="width: 75%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-8">
+                        <h4 class="text-lg font-semibold text-gray-700 mb-2 flex items-center"><span class="material-icons mr-2 text-blue-500">water_drop</span>Rain Prediction</h4>
+                        <p class="text-sm text-gray-500 mb-6">Hourly forecast for the next 12 hours.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-blue-100/50 p-6 rounded-2xl border border-blue-200 transition-all duration-300 hover:shadow-md hover:border-blue-300">
+                                <h5 class="font-semibold text-blue-800 mb-4 text-center">Summary for the Day</h5>
+                                <div class="flex items-center justify-around space-x-4">
+                                    <div class="text-center">
+                                        <div class="relative w-24 h-24 mx-auto">
+                                            <svg class="w-full h-full" viewBox="0 0 36 36"><path class="text-blue-200" d="M18 2.0845
+                                                  a 15.9155 15.9155 0 0 1 0 31.831
+                                                  a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path><path class="text-blue-500" d="M18 2.0845
+                                                  a 15.9155 15.9155 0 0 1 0 31.831
+                                                  a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="35, 100" stroke-linecap="round" stroke-width="3"></path></svg>
+                                            <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                                <span id="rain-chance" class="text-2xl font-bold text-blue-900">35%</span>
+                                                <span class="text-xs text-blue-700">Chance</span>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm font-medium text-blue-800 mt-2">Overall Day</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="relative w-24 h-24 mx-auto flex items-center justify-center bg-blue-200 rounded-full overflow-hidden">
+                                            <div class="wave">
+                                                <div class="wave-bg" style="--level: 45%; top: calc(100% - var(--level));"></div>
+                                            </div>
+                                            <div class="relative z-10 flex flex-col items-center">
+                                                <span class="material-icons text-4xl text-blue-600">water_drop</span>
+                                                <p id="total-precip" class="text-sm font-medium text-blue-800">4.5mm</p>
+                                                <p class="text-xs text-blue-600">Total</p>
+                                            </div>
+                                        </div>
+                                        <p id="rain-summary" class="text-sm font-medium text-blue-800 mt-2">Good for crops</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-6 rounded-2xl transition-all duration-300 hover:shadow-md hover:bg-gray-100">
+                                <h5 class="font-semibold text-gray-800 mb-4">Timeline</h5>
+                                <div class="space-y-4" id="rain-timeline">
+                                    <div class="flex items-center timeline-item">
+                                        <p class="text-sm font-medium text-gray-600 w-16 time-label">Now</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mr-4">
+                                            <div class="bg-blue-300 h-2.5 rounded-full rain-bar" style="width: 10%"></div>
+                                        </div>
+                                        <p class="text-sm font-bold text-gray-800 w-12 text-right rain-percent">10%</p>
+                                    </div>
+                                    <div class="flex items-center timeline-item">
+                                        <p class="text-sm font-medium text-gray-600 w-16 time-label">3 PM</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mr-4">
+                                            <div class="bg-blue-400 h-2.5 rounded-full rain-bar" style="width: 25%"></div>
+                                        </div>
+                                        <p class="text-sm font-bold text-gray-800 w-12 text-right rain-percent">25%</p>
+                                    </div>
+                                    <div class="flex items-center timeline-item">
+                                        <p class="text-sm font-medium text-gray-600 w-16 time-label">6 PM</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mr-4">
+                                            <div class="bg-blue-500 h-2.5 rounded-full rain-bar" style="width: 80%"></div>
+                                        </div>
+                                        <p class="text-sm font-bold text-gray-800 w-12 text-right rain-percent">80%</p>
+                                    </div>
+                                    <div class="flex items-center timeline-item">
+                                        <p class="text-sm font-medium text-gray-600 w-16 time-label">9 PM</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mr-4">
+                                            <div class="bg-blue-300 h-2.5 rounded-full rain-bar" style="width: 15%"></div>
+                                        </div>
+                                        <p class="text-sm font-bold text-gray-800 w-12 text-right rain-percent">15%</p>
+                                    </div>
+                                    <div class="flex items-center timeline-item">
+                                        <p class="text-sm font-medium text-gray-600 w-16 time-label">12 AM</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mr-4">
+                                            <div class="bg-blue-200 h-2.5 rounded-full rain-bar" style="width: 5%"></div>
+                                        </div>
+                                        <p class="text-sm font-bold text-gray-800 w-12 text-right rain-percent">5%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="space-y-8 lg:col-span-1">
+            <div class="bg-white p-6 rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1" x-data="{ expanded: true, selectedLocation: 'KMC' }" x-init="$watch('allExpanded', value => expanded = value)">
+                <div @click="expanded = !expanded" class="flex justify-between items-center cursor-pointer">
+                    <h3 class="text-xl font-semibold text-gray-800 flex items-center">
+                        <span class="material-icons text-teal-500 mr-3">location_on</span> Your Location
+                    </h3>
+                    <button :class="{'rotate-180': !expanded}" class="text-gray-500 hover:text-gray-700 transition-transform">
+                        <span class="material-icons">expand_less</span>
+                    </button>
+                </div>
+                <div class="mt-6 space-y-6" x-collapse x-show="expanded">
+                    <p id="location-name" class="text-lg font-medium text-gray-800">Detecting location...</p>
+                    <div id="map" class="rounded-xl h-48 relative overflow-hidden group"></div>
+                    <div class="relative" x-data="{ open: false }">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Farm Type</label>
+                        <div class="relative">
+                            <button @click="open = !open" class="w-full pl-3 pr-10 py-3 bg-gray-100 border-transparent rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow flex items-center justify-between">
+                                <span class="capitalize" x-text="farmType.replace('-', ' ')">Open air</span>
+                                <span class="material-icons text-gray-500">unfold_more</span>
+                            </button>
+                            <div @click.outside="open = false" class="absolute z-10 mt-1 w-full bg-white rounded-lg shadow-xl py-1" x-cloak x-show="open">
+                                <a @click.prevent="farmType = 'open-air'; open = false" class="block px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">Open Air</a>
+                                <a @click.prevent="farmType = 'greenhouse'; open = false" class="block px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">Greenhouse</a>
+                                <a @click.prevent="farmType = 'tunnel'; open = false" class="block px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">Tunnel</a>
+                                <a @click.prevent="farmType = 'other'; open = false" class="block px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">Other</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="lg:col-span-3">
+            <section class="bg-white p-8 rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1" id="crop-advisory" x-data="{ expanded: true, openAdvisory: '' }" x-init="$watch('allExpanded', value => expanded = value)">
+                <div @click="expanded = !expanded" class="flex justify-between items-center cursor-pointer">
+                    <h3 class="text-2xl font-semibold text-gray-800 flex items-center">
+                        <span class="material-icons text-teal-500 mr-3">eco</span> Crop Advisory
+                    </h3>
+                    <button :class="{'rotate-180': !expanded}" class="text-gray-500 hover:text-gray-700 transition-transform">
+                        <span class="material-icons">expand_less</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start mt-8" x-collapse x-show="expanded">
+                    <div class="transition-all duration-300 hover:scale-[1.02]" x-data="{ open: false, selected: 'wheat', cropName: 'Wheat', cropIcon: window.cropIcons.wheat, cropFieldImage: window.cropFieldImages.wheat }">
+                        <h4 class="text-lg font-medium text-gray-700 mb-4">Select Your Crop</h4>
+                        <div class="relative mb-4">
+                            <button @click="open = !open" class="w-full bg-gray-100 text-left py-3 px-4 rounded-lg flex justify-between items-center focus:outline-none focus:ring-2 focus:ring-teal-500 transition-shadow">
+<span class="flex items-center">
+<img x-bind:src="cropIcon" alt="" class="w-8 h-8 mr-3 rounded-full object-cover"/>
+<span x-text="cropName"></span>
+</span>
+                                <span :class="{'rotate-180': open}" class="material-icons transition-transform">expand_more</span>
+                            </button>
+                            <div @click.outside="open = false" class="absolute z-10 mt-1 w-full bg-white rounded-lg shadow-xl py-1" x-cloak x-show="open">
+                                <a @click.prevent="selected = 'wheat'; cropName = 'Wheat'; cropIcon = window.cropIcons.wheat; cropFieldImage = window.cropFieldImages.wheat; $dispatch('crop-selected', { selected: 'wheat', name: 'Wheat' }); open = false" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">
+                                    <img alt="Wheat icon" class="w-8 h-8 mr-3 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWMj1u1IGqWKofsv6Vk2Vtkss399jEsLBkYksN0xGgR2Nw3CBK7ZyeuKIKRre3U0rPxxMoJAxN9dc-o2UrdQl0gc-z3YtdMAyTqtPV7Y6bmPsqFKO8jUxDYWR71_ikngqw_VYKsKpMHC_1D81TJ1w88qmUVUNanevJfxxvkvG9ZE9WGD3N1RmMTJXqaPnbIpoMxUyiVgGoQ8MZvE2idATrRhiQAB3bVsiwPMAFfYlpBbE9KQE4ZrmJyYg-Ptx7Pp1-_k2PfQd01Adr"/> Wheat
+                                </a>
+                                <a @click.prevent="selected = 'corn'; cropName = 'Corn'; cropIcon = window.cropIcons.corn; cropFieldImage = window.cropFieldImages.corn; $dispatch('crop-selected', { selected: 'corn', name: 'Corn' }); open = false" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">
+                                    <img alt="Corn icon" class="w-8 h-8 mr-3 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuub1izGdj9aXhzZfUsUdJkyw5BBhBs5LQYUx-DoL80Cc8OhlSBbUFwDNWC7b0vsb3QEOJfUjOq-4Y5ustFF38fhzx3vUAC8BanE64A_gMwUxOlcPBDEVeUckD8f_NvPioAHrCA0RiwZMfxvPkddORAXCPV_ZBmSZdxkwp1JhAlBYcVpy2Sn4OVaksR4i3cYx7mG3TnLeRP8F-ZuRNVwMqknn6fqi1BZI2u5EYnt55yNU7j_5Pbie_-XHagoHrmlF4jLqWf4OXB8sk"/> Corn
+                                </a>
+                                <a @click.prevent="selected = 'rice'; cropName = 'Rice'; cropIcon = window.cropIcons.rice; cropFieldImage = window.cropFieldImages.rice; $dispatch('crop-selected', { selected: 'rice', name: 'Rice' }); open = false" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">
+                                    <img alt="Rice icon" class="w-8 h-8 mr-3 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKYu_cJPF7viaifyjTdauXgE1l9LbFcIV4PKI1BAgdfjnfO0Qs3eS6wZvV8WvNUX7MCew9Q6A480_jeaMQr1AmEvZMRajIeJjiB929CBy2qPHpB8UPmyJNGqFvvxKC4UYwvwRnDM0tiSQ3-XqDRt34exk9X3xaB8nJM5cWhOmqx_Iah7osMJPLiVmKB2o4F-9s1cHFQrcMwJkQcRNuJnOzJYEYypp3fVzz3YY3HgjmJOT2rO9SX8K3U86DQXXpjHwwSCCWZMpoLyeU"/> Rice
+                                </a>
+                                <a @click.prevent="selected = 'tomato'; cropName = 'Tomato'; cropIcon = window.cropIcons.tomato; cropFieldImage = window.cropFieldImages.tomato; $dispatch('crop-selected', { selected: 'tomato', name: 'Tomato' }); open = false" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">
+                                    <img alt="Tomato icon" class="w-8 h-8 mr-3 rounded-full object-cover" src="https://cdn-icons-png.flaticon.com/512/2909/2909894.png"/> Tomato
+                                </a>
+                                <a @click.prevent="selected = 'potato'; cropName = 'Potato'; cropIcon = window.cropIcons.potato; cropFieldImage = window.cropFieldImages.potato; $dispatch('crop-selected', { selected: 'potato', name: 'Potato' }); open = false" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100" href="#">
+                                    <img alt="Potato icon" class="w-8 h-8 mr-3 rounded-full object-cover" src="https://cdn-icons-png.flaticon.com/512/1652/1652077.png"/> Potato
+                                </a>
+                            </div>
+                        </div>
+                        <p class="text-gray-500 text-sm mb-4">Select your crop to see tailored advice based on the current weather conditions. Reports update automatically.</p>
+                        <img x-bind:src="cropFieldImage" alt="Crop field" class="rounded-xl object-cover h-48 w-full"/>
+                    </div>
+                    <div class="bg-green-50 p-6 rounded-xl border border-green-200 transition-all duration-300 hover:shadow-lg hover:border-green-300" x-data="{ openAdvisory: '' }">
+                        <h4 class="text-xl font-semibold text-gray-800 mb-4 flex items-center"><span class="material-icons mr-2 text-green-600">article</span>Advisory for <span x-text="cropName"></span></h4>
+                        <p class="text-gray-600 mb-6">This is a humane interpretation of the data, helping you make the best decision.</p>
+                        <div class="space-y-4">
+                            <div id="temp-advisory" class="rounded-lg bg-green-100 border-l-4 border-green-500 overflow-hidden transition-all duration-300 hover:bg-green-200/60">
+                                <div @click="openAdvisory = openAdvisory === 'temperature' ? '' : 'temperature'" class="flex items-start p-4 cursor-pointer">
+                                    <span class="material-icons text-green-500 text-3xl mr-4 mt-1">thermostat</span>
+                                    <div class="flex-grow">
+                                        <h5 class="font-semibold text-gray-800">Temperature</h5>
+                                        <p id="temp-message" class="text-gray-700">Optimal temperature.</p>
+                                    </div>
+                                    <span :class="{'rotate-180': openAdvisory === 'temperature'}" class="material-icons transition-transform">expand_more</span>
+                                </div>
+                                <div class="px-4 pb-4" x-cloak x-collapse x-show="openAdvisory === 'temperature'">
+                                    <p id="temp-solution" class="text-sm text-gray-600 mb-3">No action needed.</p>
+                                    <a class="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-800" href="https://www.youtube.com/watch?v=example_temp" target="_blank">
+                                        <span class="material-icons mr-1">smart_display</span> Watch Video Guide
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="rounded-lg bg-green-100 border-l-4 border-green-500 overflow-hidden transition-all duration-300 hover:bg-green-200/60" x-show="farmType === 'open-air'">
+                                <div @click="openAdvisory = openAdvisory === 'irrigation' ? '' : 'irrigation'" class="flex items-start p-4 cursor-pointer">
+                                    <span class="material-icons text-green-500 text-3xl mr-4 mt-1">opacity</span>
+                                    <div class="flex-grow">
+                                        <h5 class="font-semibold text-gray-800">Irrigation</h5>
+                                        <p class="text-gray-700">The soil is happy. Hold off on watering for now.</p>
+                                    </div>
+                                    <span :class="{'rotate-180': openAdvisory === 'irrigation'}" class="material-icons transition-transform">expand_more</span>
+                                </div>
+                                <div class="px-4 pb-4" x-cloak x-collapse x-show="openAdvisory === 'irrigation'">
+                                    <p class="text-sm text-gray-600 mb-3"><strong>Solution:</strong> No action needed. Monitor soil moisture in 2-3 days or if leaves show signs of wilting.</p>
+                                    <a class="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-800" href="https://www.youtube.com/watch?v=example1" target="_blank">
+                                        <span class="material-icons mr-1">smart_display</span> Watch Video Guide
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="rounded-lg bg-blue-100 border-l-4 border-blue-500 overflow-hidden transition-all duration-300 hover:bg-blue-200/60" x-show="farmType === 'greenhouse'">
+                                <div @click="openAdvisory = openAdvisory === 'ventilation' ? '' : 'ventilation'" class="flex items-start p-4 cursor-pointer">
+                                    <span class="material-icons text-blue-500 text-3xl mr-4 mt-1">air</span>
+                                    <div class="flex-grow">
+                                        <h5 class="font-semibold text-gray-800">Ventilation</h5>
+                                        <p class="text-gray-700">High humidity in the greenhouse. Increase airflow.</p>
+                                    </div>
+                                    <span :class="{'rotate-180': openAdvisory === 'ventilation'}" class="material-icons transition-transform">expand_more</span>
+                                </div>
+                                <div class="px-4 pb-4" x-cloak x-collapse x-show="openAdvisory === 'ventilation'">
+                                    <p class="text-sm text-gray-600 mb-3"><strong>Solution:</strong> Open vents or use fans to lower humidity and reduce the risk of fungal diseases.</p>
+                                    <a class="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-800" href="https://www.youtube.com/watch?v=example_vent" target="_blank">
+                                        <span class="material-icons mr-1">smart_display</span> Watch Video Guide
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="rounded-lg bg-yellow-100 border-l-4 warning-pulse overflow-hidden transition-all duration-300 hover:bg-yellow-200/60">
+                                <div @click="openAdvisory = openAdvisory === 'pest' ? '' : 'pest'" class="flex items-start p-4 cursor-pointer">
+                                    <span class="material-icons text-yellow-600 text-3xl mr-4 mt-1">bug_report</span>
+                                    <div class="flex-grow">
+                                        <h5 class="font-semibold text-gray-800">Pest Control</h5>
+                                        <p class="text-gray-700">Warm weather may attract aphids. Check your plants.</p>
+                                    </div>
+                                    <span :class="{'rotate-180': openAdvisory === 'pest'}" class="material-icons transition-transform">expand_more</span>
+                                </div>
+                                <div class="px-4 pb-4" x-cloak x-collapse x-show="openAdvisory === 'pest'">
+                                    <p class="text-sm text-gray-600 mb-3" x-show="farmType === 'open-air'"><strong>Solution:</strong> Look for clusters of small insects on new growth. Apply neem oil spray as a natural deterrent if pests are present.</p>
+                                    <p class="text-sm text-gray-600 mb-3" x-show="farmType === 'greenhouse'"><strong>Solution:</strong> Inspect plants for aphids, especially in sheltered spots. Introduce ladybugs or use sticky traps as a primary control measure.</p>
+                                    <a class="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-800" href="https://www.youtube.com/watch?v=example2" target="_blank">
+                                        <span class="material-icons mr-1">smart_display</span> Watch Video Guide
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="rounded-lg bg-red-100 border-l-4 border-red-500 overflow-hidden transition-all duration-300 hover:bg-red-200/60">
+                                <div @click="openAdvisory = openAdvisory === 'disease' ? '' : 'disease'" class="flex items-start p-4 cursor-pointer">
+                                    <span class="material-icons text-red-500 text-3xl mr-4 mt-1">local_florist</span>
+                                    <div class="flex-grow">
+                                        <h5 class="font-semibold text-gray-800">Disease Alert</h5>
+                                        <p class="text-gray-700">High humidity raises risk of powdery mildew.</p>
+                                    </div>
+                                    <span :class="{'rotate-180': openAdvisory === 'disease'}" class="material-icons transition-transform">expand_more</span>
+                                </div>
+                                <div class="px-4 pb-4" x-cloak x-collapse x-show="openAdvisory === 'disease'">
+                                    <p class="text-sm text-gray-600 mb-3" x-show="farmType === 'open-air'"><strong>Solution:</strong> Ensure good air circulation by pruning if necessary. Prepare a baking soda or milk spray solution for treatment if white spots appear.</p>
+                                    <p class="text-sm text-gray-600 mb-3" x-show="farmType === 'greenhouse'"><strong>Solution:</strong> Critically monitor air circulation. High humidity is a major risk factor. Use internal fans and ensure vents are clear. Apply a potassium bicarbonate spray as a preventative measure.</p>
+                                    <a class="inline-flex items-center text-sm font-medium text-teal-600 hover:text-teal-800" href="https://www.youtube.com/watch?v=example3" target="_blank">
+                                        <span class="material-icons mr-1">smart_display</span> Watch Video Guide
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <div class="lg:col-span-3">
+            <section class="bg-white p-8 rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1" id="contact" x-data="{ feedbackExpanded: true, submitted: false }" x-init="$watch('allExpanded', value => feedbackExpanded = value)">
+                <div @click="feedbackExpanded = !feedbackExpanded" class="flex justify-between items-center cursor-pointer">
+                    <h3 class="text-2xl font-semibold text-gray-800 flex items-center">
+                        <span class="material-icons text-teal-500 mr-3">feedback</span> Share Your Feedback
+                    </h3>
+                    <button :class="{'rotate-180': !feedbackExpanded}" class="text-gray-500 hover:text-gray-700 transition-transform">
+                        <span class="material-icons">expand_less</span>
+                    </button>
+                </div>
+                <div class="mt-6" x-collapse x-show="feedbackExpanded">
+                    <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-6" role="alert" x-cloak x-show="submitted">
+                        <p class="font-bold">Thank You!</p>
+                        <p>Your feedback has been submitted successfully. We appreciate your input.</p>
+                    </div>
+                    <form @submit.prevent="submitted = true; setTimeout(() => submitted = false, 5000)" x-show="!submitted">
+                        <p class="text-gray-600 mb-4">Was this advisory helpful? Help us improve by rating your experience.</p>
+                        <div class="flex items-center space-x-4 mb-6" x-data="{ rating: 0 }">
+                            <template x-for="star in 5">
+                                <button :class="star <= rating ? 'text-yellow-400' : 'text-gray-300'" @click="rating = star" class="text-4xl hover:text-yellow-400 transition-colors focus:outline-none" type="button">
+                                    <span class="material-icons">star</span>
+                                </button>
+                            </template>
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-medium mb-2" for="feedback-comments">Additional Comments (Optional)</label>
+                            <textarea class="w-full p-3 bg-gray-100 border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow" id="feedback-comments" placeholder="Tell us more about your experience..." rows="4"></textarea>
+                        </div>
+                        <button class="w-full bg-teal-500 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center hover:bg-teal-600 transition-all transform hover:scale-105 shadow-md" type="submit">
+                            <span class="material-icons mr-2">send</span> Submit Feedback
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</main>
 <script>
-    document.getElementById('emailForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const messageEl = document.getElementById('message');
-      const email = document.getElementById('email').value;
-      const defaultLat = 27.7172; // Kathmandu
-      const defaultLon = 85.3240;
-      const locationInputs = document.getElementById('locationInputs');
-      const latInput = document.getElementById('latitude').value;
-      const lonInput = document.getElementById('longitude').value;
+    // Crop icons and field images
+    window.cropIcons = {
+        wheat: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBWMj1u1IGqWKofsv6Vk2Vtkss399jEsLBkYksN0xGgR2Nw3CBK7ZyeuKIKRre3U0rPxxMoJAxN9dc-o2UrdQl0gc-z3YtdMAyTqtPV7Y6bmPsqFKO8jUxDYWR71_ikngqw_VYKsKpMHC_1D81TJ1w88qmUVUNanevJfxxvkvG9ZE9WGD3N1RmMTJXqaPnbIpoMxUyiVgGoQ8MZvE2idATrRhiQAB3bVsiwPMAFfYlpBbE9KQE4ZrmJyYg-Ptx7Pp1-_k2PfQd01Adr',
+        corn: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBuub1izGdj9aXhzZfUsUdJkyw5BBhBs5LQYUx-DoL80Cc8OhlSBbUFwDNWC7b0vsb3QEOJfUjOq-4Y5ustFF38fhzx3vUAC8BanE64A_gMwUxOlcPBDEVeUckD8f_NvPioAHrCA0RiwZMfxvPkddORAXCPV_ZBmSZdxkwp1JhAlBYcVpy2Sn4OVaksR4i3cYx7mG3TnLeRP8F-ZuRNVwMqknn6fqi1BZI2u5EYnt55yNU7j_5Pbie_-XHagoHrmlF4jLqWf4OXB8sk',
+        rice: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCKYu_cJPF7viaifyjTdauXgE1l9LbFcIV4PKI1BAgdfjnfO0Qs3eS6wZvV8WvNUX7MCew9Q6A480_jeaMQr1AmEvZMRajIeJjiB929CBy2qPHpB8UPmyJNGqFvvxKC4UYwvwRnDM0tiSQ3-XqDRt34exk9X3xaB8nJM5cWhOmqx_Iah7osMJPLiVmKB2o4F-9s1cHFQrcMwJkQcRNuJnOzJYEYypp3fVzz3YY3HgjmJOT2rO9SX8K3U86DQXXpjHwwSCCWZMpoLyeU',
+        tomato: 'https://cdn-icons-png.flaticon.com/512/2909/2909894.png',
+        potato: 'https://cdn-icons-png.flaticon.com/512/1652/1652077.png'
+    };
 
-      if (latInput && lonInput) {
-        const lat = parseFloat(latInput);
-        const lon = parseFloat(lonInput);
-        if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-          messageEl.textContent = 'Using manually entered location...';
-          messageEl.className = 'mt-4 text-center text-sm text-gray-600';
-          submitSubscription(email, lat, lon);
-          return;
-        } else {
-          messageEl.textContent = 'Invalid latitude or longitude. Please enter valid coordinates.';
-          messageEl.className = 'mt-4 text-center text-sm text-red-600';
-          return;
-        }
-      }
+    window.cropFieldImages = {
+        wheat: '/assets/wheatfield.jpg',
+        corn: '/assets/cornfield.jpg',
+        rice: '/assets/ricefield.jpg',
+        tomato: '/assets/tomatofield.jpg',
+        potato: '/assets/potatofield.jpg'
+    };
 
-      if (!navigator.geolocation) {
-        messageEl.textContent = 'Geolocation is not supported by your browser. Please enter your location manually.';
-        messageEl.className = 'mt-4 text-center text-sm text-red-600';
-        locationInputs.classList.remove('hidden');
-        return;
-      }
+    let cropDataList;
 
-      messageEl.textContent = 'Requesting your location...';
-      messageEl.className = 'mt-4 text-center text-sm text-gray-600';
-
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          console.log(`Geolocation success: lat:${lat}, lon:${lon}`);
-          messageEl.textContent = 'Location retrieved successfully!';
-          messageEl.className = 'mt-4 text-center text-sm text-green-600';
-          await submitSubscription(email, lat, lon);
-        },
-        (error) => {
-          console.error('Geolocation error:', error.message);
-          messageEl.textContent = `Failed to get location: ${error.message}. Please enter your location manually or use default (Kathmandu).`;
-          messageEl.className = 'mt-4 text-center text-sm text-red-600';
-          locationInputs.classList.remove('hidden');
-          document.getElementById('latitude').value = defaultLat;
-          document.getElementById('longitude').value = defaultLon;
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      );
-    });
-
-    async function submitSubscription(email, lat, lon) {
-      const messageEl = document.getElementById('message');
-      try {
-        const response = await fetch('/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, lat, lon }),
-        });
-        const result = await response.json();
-        messageEl.textContent = result.message;
-        messageEl.className = `mt-4 text-center text-sm ${response.ok ? 'text-green-600' : 'text-red-600'}`;
-        if (response.ok) {
-          document.getElementById('emailForm').reset();
-          document.getElementById('locationInputs').classList.add('hidden');
-        }
-      } catch (error) {
-        console.error('Subscription error:', error.message);
-        messageEl.textContent = 'Error subscribing. Try again.';
-        messageEl.className = 'mt-4 text-center text-sm text-red-600';
-      }
+    // Function to get UV level
+    function getUVLevel(uv) {
+        if (uv < 3) return { level: 'Low', color: 'green-500' };
+        if (uv < 6) return { level: 'Moderate', color: 'yellow-500' };
+        if (uv < 8) return { level: 'High', color: 'yellow-500' };
+        if (uv < 11) return { level: 'Very High', color: 'orange-500' };
+        return { level: 'Extreme', color: 'red-500' };
     }
+
+    // Function to get status for temp, humidity, wind
+    function getTempStatus(temp) {
+        return temp >= 10 && temp <= 35 ? { status: 'Normal', color: 'green-500' } : { status: 'Extreme', color: 'red-500' };
+    }
+
+    function getHumidityStatus(humidity) {
+        return humidity > 80 ? { status: 'High', color: 'red-500' } : { status: 'Normal', color: 'green-500' };
+    }
+
+    function getWindStatus(wind) {
+        return wind < 20 ? { status: 'Normal', color: 'green-500' } : { status: 'High', color: 'yellow-500' };
+    }
+
+    // Function to update UI with weather data
+    function updateUI(data) {
+        // Update location name
+        document.getElementById('location-name').textContent = data.locationName || 'Unknown';
+
+        // Update temperature
+        document.getElementById('current-temp').textContent = data.currentTemp ? `${data.currentTemp}°C` : 'N/A';
+        document.getElementById('min-max-temp').textContent = data.minTemp && data.maxTemp ? `Min: ${data.minTemp}°C Max: ${data.maxTemp}°C` : 'Min: N/A Max: N/A';
+        const tempStatus = getTempStatus(data.currentTemp || 0);
+        document.getElementById('temp-dot').querySelector('div').className = `w-3 h-3 bg-${tempStatus.color} rounded-full blinking-dot`;
+        document.getElementById('temp-dot').querySelector('.tooltip').textContent = tempStatus.status;
+        document.getElementById('temp-bar').style.width = `${Math.min((parseFloat(data.currentTemp || 0) / 40) * 100, 100)}%`;
+
+        // Update humidity
+        document.getElementById('humidity').textContent = data.humidity ? `${data.humidity}%` : 'N/A';
+        const humidityStatus = getHumidityStatus(data.humidity || 0);
+        document.getElementById('humidity-dot').querySelector('div').className = `w-3 h-3 bg-${humidityStatus.color} rounded-full blinking-dot`;
+        document.getElementById('humidity-dot').querySelector('.tooltip').textContent = humidityStatus.status;
+        document.getElementById('humidity-bar').style.width = `${Math.min(data.humidity || 0, 100)}%`;
+
+        // Update wind speed
+        document.getElementById('wind-speed').textContent = data.windSpeed ? `${data.windSpeed} km/h` : 'N/A';
+        const windStatus = getWindStatus(data.windSpeed || 0);
+        document.getElementById('wind-dot').querySelector('div').className = `w-3 h-3 bg-${windStatus.color} rounded-full blinking-dot`;
+        document.getElementById('wind-dot').querySelector('.tooltip').textContent = windStatus.status;
+        document.getElementById('wind-bar').style.width = `${Math.min((parseFloat(data.windSpeed || 0) / 50) * 100, 100)}%`;
+
+        // Update UV index
+        const uvLevel = getUVLevel(data.uv || 0);
+        document.getElementById('uv-index').textContent = uvLevel.level;
+        document.getElementById('uv-dot').querySelector('div').className = `w-3 h-3 bg-${uvLevel.color} rounded-full blinking-dot`;
+        document.getElementById('uv-dot').querySelector('.tooltip').textContent = uvLevel.level;
+        document.getElementById('uv-bar').style.width = `${Math.min((data.uv || 0 / 12) * 100, 100)}%`;
+
+        // Update rain summary
+        document.getElementById('rain-chance').textContent = `${data.rainChance || 0}%`;
+        document.querySelector('svg path.text-blue-500').setAttribute('stroke-dasharray', `${data.rainChance || 0}, 100`);
+        document.getElementById('total-precip').textContent = `${data.precipitation || 0}mm`;
+
+        // Update rain summary text
+        const precipitation = parseFloat(data.precipitation || 0);
+        document.getElementById('rain-summary').textContent = precipitation < 1 ? 'Low rain, may need irrigation' : precipitation > 10 ? 'Heavy rain, risk of flooding' : 'Good for crops';
+
+        // Update wave level
+        const level = Math.min(precipitation * 10, 100);
+        document.querySelector('.wave-bg').style.setProperty('--level', `${level}%`);
+
+        // Update rain timeline
+        const intervals = [0, 1, 2, 3, 4];
+        const timelineItems = document.querySelectorAll('#rain-timeline .timeline-item');
+        const local_date = data.localtime.split(' ')[0];
+        const local_time = data.localtime.split(' ')[1];
+        const localNowHour = parseInt(local_time.split(':')[0]);
+        const localNowMinute = parseInt(local_time.split(':')[1]);
+
+        intervals.forEach((interval, index) => {
+            let totalMinutes = localNowHour * 60 + localNowMinute + interval * 60;
+            const totalHours = Math.floor(totalMinutes / 60);
+            const future_minute = totalMinutes % 60;
+            const carry = Math.floor(totalHours / 24);
+            const future_hour = totalHours % 24;
+
+            let future_date = local_date;
+            if (carry > 0) {
+                let [year, month, day] = local_date.split('-').map(Number);
+                let dateObj = new Date(year, month - 1, day);
+                dateObj.setDate(dateObj.getDate() + carry);
+                future_date = dateObj.toISOString().split('T')[0];
+            }
+
+            const hourlyData = data.hourly.find(h => {
+                const h_date = h.time.split(' ')[0];
+                const h_hour = parseInt(h.time.split(' ')[1].split(':')[0]);
+                return h_date === future_date && h_hour === future_hour;
+            }) || { chance_of_rain: 0 };
+
+            let chance = hourlyData.chance_of_rain;
+
+            let label = '';
+            if (interval === 0) {
+                label = 'Now';
+            } else {
+                let hour12 = future_hour % 12 || 12;
+                let ampm = future_hour < 12 ? ' AM' : ' PM';
+                label = hour12 + ampm;
+                if (carry > 0) {
+                    label += ' (tomorrow)';
+                }
+            }
+
+            const item = timelineItems[index];
+            item.querySelector('.time-label').textContent = label;
+            item.querySelector('.rain-bar').style.width = `${chance}%`;
+            item.querySelector('.rain-percent').textContent = `${chance}%`;
+            const colorIntensity = chance < 20 ? '200' : chance < 50 ? '300' : chance < 80 ? '400' : '500';
+            item.querySelector('.rain-bar').className = `bg-blue-${colorIntensity} h-2.5 rounded-full rain-bar`;
+        });
+    }
+
+    // Update crop advisory based on selected crop and weather
+    function updateAdvice(selected) {
+        const crop = cropDataList.find(c => c.crop.toLowerCase() === selected);
+        if (!crop) return;
+
+        const currentTemp = window.weatherData.currentTemp ? parseFloat(window.weatherData.currentTemp) : 0;
+
+        let message = '';
+        let solution = '';
+        let color = 'green-500';
+
+        const optimalRange = `${crop.temp_optimal[0]}-${crop.temp_optimal[1]}°C`;
+        const absRange = `Min: ${crop.temp_min}°C, Max: ${crop.temp_max}°C`;
+
+        if (currentTemp < crop.temp_min) {
+            message = `Too cold for ${crop.crop}. Current: ${currentTemp}°C. Optimal: ${optimalRange}. Absolute: ${absRange}. Risk of damage.`;
+            solution = 'Consider protective measures like row covers.';
+            color = 'red-500';
+        } else if (currentTemp > crop.temp_max) {
+            message = `Too hot for ${crop.crop}. Current: ${currentTemp}°C. Optimal: ${optimalRange}. Absolute: ${absRange}. Heat stress possible.`;
+            solution = 'Provide shade and increase watering.';
+            color = 'red-500';
+        } else if (currentTemp < crop.temp_optimal[0] || currentTemp > crop.temp_optimal[1]) {
+            message = `Suboptimal temperature for ${crop.crop}. Current: ${currentTemp}°C. Optimal: ${optimalRange}. Absolute: ${absRange}.`;
+            solution = 'Monitor plant health closely.';
+            color = 'yellow-500';
+        } else {
+            message = `Optimal temperature for ${crop.crop}. Current: ${currentTemp}°C. Optimal: ${optimalRange}. Absolute: ${absRange}.`;
+            solution = 'No action needed.';
+            color = 'green-500';
+        }
+
+        document.getElementById('temp-message').textContent = message;
+        document.getElementById('temp-solution').textContent = solution;
+
+        const tempDiv = document.getElementById('temp-advisory');
+        tempDiv.classList.remove('bg-green-100', 'border-green-500', 'bg-yellow-100', 'border-yellow-500', 'bg-red-100', 'border-red-500', 'warning-pulse');
+        tempDiv.classList.add(`bg-${color.split('-')[0]}-100`, `border-${color}`);
+        if (color !== 'green-500') tempDiv.classList.add('warning-pulse');
+
+        // Update icon color
+        tempDiv.querySelector('.material-icons').className = `material-icons text-${color.split('-')[0]}-500 text-3xl mr-4 mt-1`;
+    }
+
+    // Get current location and fetch weather
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            // Initialize map
+            const map = L.map('map').setView([lat, lon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            L.marker([lat, lon]).addTo(map).bindPopup('Your Location').openPopup();
+
+            try {
+                const response = await fetch(`/weather?lat=${lat}&lon=${lon}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                window.weatherData = data;
+                updateUI(data);
+            } catch (error) {
+                console.error('Fetch error:', error);
+                document.getElementById('location-name').textContent = 'Error fetching weather data.';
+            }
+        }, (error) => {
+            console.error('Geolocation error:', error);
+            const defaultLat = 27.7172;
+            const defaultLon = 85.3240;
+            document.getElementById('location-name').textContent = 'Location access denied. Using default (Kathmandu).';
+
+            // Initialize map with default
+            const map = L.map('map').setView([defaultLat, defaultLon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            L.marker([defaultLat, defaultLon]).addTo(map).bindPopup('Default Location').openPopup();
+
+            fetch(`/weather?lat=${defaultLat}&lon=${defaultLon}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    window.weatherData = data;
+                    updateUI(data);
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    document.getElementById('location-name').textContent = 'Error fetching default weather data.';
+                });
+        });
+    } else {
+        console.error('Geolocation not supported');
+        document.getElementById('location-name').textContent = 'Geolocation not supported. Using default.';
+        const defaultLat = 27.7172;
+        const defaultLon = 85.3240;
+
+        const map = L.map('map').setView([defaultLat, defaultLon], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        L.marker([defaultLat, defaultLon]).addTo(map).bindPopup('Default Location').openPopup();
+
+        fetch(`/weather?lat=${defaultLat}&lon=${defaultLon}`)
+            .then(response => response.json())
+            .then(data => {
+                window.weatherData = data;
+                updateUI(data);
+            })
+            .catch(error => console.error('Fetch error:', error));
+    }
+    fetch('crop_data_v01.json')
+        .then(res => res.json())
+        .then(cd => {
+            cropDataList = cd;
+            updateAdvice('wheat');
+        })
+        .catch(error => console.error('Crop data fetch error:', error));
 </script>
 </body>
 </html>
